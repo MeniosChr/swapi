@@ -1,8 +1,9 @@
 import asyncio
 import re
-
 import httpx
-from sqlalchemy import select
+
+from sqlalchemy import select, func
+from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
 from app.models import Starship, Character, Film
@@ -61,6 +62,23 @@ async def sync_swapi_data():
         db.close()
 
     return {"inserted": counts}
+
+def get_paginated(db: Session, model, page: int, page_size: int):
+    offset = (page - 1) * page_size
+    entries = db.scalars(
+        select(model).order_by(model.id).offset(offset).limit(page_size)
+    ).all()
+    total = db.scalar(select(func.count()).select_from(model))
+    return entries, total
+
+def search_paginated(db: Session, model, column, term: str, page: int, page_size: int):
+    offset = (page - 1) * page_size
+    filter_expr = column.ilike(f"%{term}%")
+    entries = db.scalars(
+        select(model).where(filter_expr).order_by(model.id).offset(offset).limit(page_size)
+    ).all()
+    total = db.scalar(select(func.count()).select_from(model).where(filter_expr))
+    return entries, total
 
 if __name__ == "__main__":
     asyncio.run(sync_swapi_data())

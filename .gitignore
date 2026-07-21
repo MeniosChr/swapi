@@ -32,5 +32,6 @@ coverage.xml
 .DS_Store
 Thumbs.db
 
-
-requirements.txt
+# Tooling caches
+.ruff_cache/
+.mypy_cache/
