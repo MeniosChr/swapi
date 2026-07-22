@@ -25,7 +25,7 @@ async def fetch_resources(client: httpx.AsyncClient, resource_url: str) -> list[
     return results
 
 
-async def fetch_characters (client: httpx.AsyncClient) -> list[dict]:
+async def fetch_characters(client: httpx.AsyncClient) -> list[dict]:
     return await fetch_resources(client, "people")
 
 async def fetch_films(client: httpx.AsyncClient) -> list[dict]:

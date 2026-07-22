@@ -7,16 +7,47 @@ from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
 from app.models import Starship, Character, Film
-from app.services.swapi_service import fetch_characters, fetch_films, fetch_starships, SwapiError
+from app.services.swapi_service import fetch_characters, fetch_films, fetch_starships, SwapiError, TIMEOUT
 
-TIMEOUT = 10.0
+def _get_swapi_id(url: str) -> int:
+    return int(re.search(r"(\d+)/$", url).group(1))
 
-def prepare_swapi_resource(item: dict, columns: set[str]) -> dict:
+def _prepare_swapi_resource(item: dict, columns: set[str]) -> dict:
     data = {key: value for key, value in item.items() if key in columns}
-    data["swapi_id"] = int(re.search(r"(\d+)/$", item["url"]).group(1))
+    data["swapi_id"] = _get_swapi_id(item["url"])
     if "MGLT" in item:  # starships expose 'MGLT' but the column is 'mglt'
         data["mglt"] = item["MGLT"]
     return data
+
+def _append_unique_from_urls(related_items, urls: list, lookup_by_swapi_id: dict):
+    for url in urls:
+        related = lookup_by_swapi_id.get(_get_swapi_id(url))
+        if related is not None and related not in related_items:
+            related_items.append(related)
+
+def _link_character_relations(
+    characters: list[dict],
+    characters_by_swapi_id: dict,
+    films_by_swapi_id: dict,
+    starships_by_swapi_id: dict,
+) -> None:
+    for item in characters:
+        character = characters_by_swapi_id.get(_get_swapi_id(item["url"]))
+        if character is None:
+            continue
+        _append_unique_from_urls(character.films, item.get("films", []), films_by_swapi_id)
+        _append_unique_from_urls(character.starships, item.get("starships", []), starships_by_swapi_id)
+
+def _link_film_relations(
+    films: list[dict],
+    films_by_swapi_id: dict,
+    starships_by_swapi_id: dict,
+) -> None:
+    for item in films:
+        film = films_by_swapi_id.get(_get_swapi_id(item["url"]))
+        if film is None:
+            continue
+        _append_unique_from_urls(film.starships, item.get("starships", []), starships_by_swapi_id)
 
 async def sync_swapi_data():
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
@@ -45,12 +76,25 @@ async def sync_swapi_data():
             existing_swapi_ids = set(db.scalars(select(table.swapi_id)))
             inserted = 0
             for item in items:
-                prepared_entry = prepare_swapi_resource(item, columns)
+                prepared_entry = _prepare_swapi_resource(item, columns)
                 if prepared_entry["swapi_id"] in existing_swapi_ids:
                     continue
                 db.add(table(**prepared_entry))
                 inserted += 1
             counts[table.__tablename__] = inserted
+        db.flush()
+
+        characters_by_swapi_id = {c.swapi_id: c for c in db.scalars(select(Character))}
+        films_by_swapi_id      = {f.swapi_id: f for f in db.scalars(select(Film))}
+        starships_by_swapi_id  = {s.swapi_id: s for s in db.scalars(select(Starship))}
+
+        _link_character_relations(
+            characters,
+            characters_by_swapi_id,
+            films_by_swapi_id,
+            starships_by_swapi_id,
+        )
+        _link_film_relations(films, films_by_swapi_id, starships_by_swapi_id)
 
         db.commit()
         print(f"Database populated: {counts}")
@@ -80,5 +124,21 @@ def search_paginated(db: Session, model, column, term: str, page: int, page_size
     total = db.scalar(select(func.count()).select_from(model).where(filter_expr))
     return entries, total
 
+def vote_entity(db: Session, model, entity_id: int):
+    entity = db.get(model, entity_id)
+    if entity is None:
+        raise SwapiError(f"Entity on {model.__tablename__} with id {entity_id} not found")
+
+    entity.vote_count += 1
+    db.commit()
+
+    # Films use title, characters & starships use name
+    label = getattr(entity, "name", None) or entity.title
+    return entity.vote_count, label
+
 if __name__ == "__main__":
     asyncio.run(sync_swapi_data())
+
+
+# Optional later: rename not-found away from SwapiError so 503 vs 404 stays crystal clear in an interview.
+# If a URL were malformed, re.search(...).group(1) would crash — OK for SWAPI data; optional hardening later

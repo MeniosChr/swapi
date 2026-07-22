@@ -1,10 +1,10 @@
-from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi import FastAPI, HTTPException, Depends, Query, Path
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import Character, Film, Starship
 from app.schemas import CharacterPage, FilmPage, StarshipPage
-from app.services.sync_services import sync_swapi_data, get_paginated, search_paginated
+from app.services.sync_services import sync_swapi_data, get_paginated, search_paginated, vote_entity
 from app.services.swapi_service import SwapiError
 
 app = FastAPI(title="Star Wars API")
@@ -53,6 +53,19 @@ def search_characters(
         items=characters,
     )
 
+@app.post("/characters/{character_id}/vote")
+def vote_character(
+        db: Session = Depends(get_db),
+        character_id: int = Path(..., ge=1),
+    ):
+    try:
+        voted_entity_count, voted_entity_name = vote_entity(db, Character, character_id)
+    except SwapiError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return {
+        "message": f"Character with name `{voted_entity_name}` voted successfully. Total votes: {voted_entity_count}"
+    }
+
 @app.get("/films", response_model=FilmPage)
 def list_films(
         db: Session = Depends(get_db),
@@ -82,6 +95,19 @@ def search_films(
         items=films,
     )
 
+@app.post("/films/{film_id}/vote")
+def vote_film(
+        db: Session = Depends(get_db),
+        film_id: int = Path(..., ge=1),
+    ):
+    try:
+        voted_entity_count, voted_entity_name = vote_entity(db, Film, film_id)
+    except SwapiError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return {
+        "message": f"Film with title `{voted_entity_name}` voted successfully. Total votes: {voted_entity_count}"
+    }
+
 @app.get("/starships", response_model=StarshipPage)
 def list_starships(
         db: Session = Depends(get_db),
@@ -110,3 +136,16 @@ def search_starships(
         total=total,
         items=starships,
     )
+
+@app.post("/starships/{starship_id}/vote")
+def vote_starship(
+        db: Session = Depends(get_db),
+        starship_id: int = Path(..., ge=1),
+    ):
+    try:
+        vote_count, label = vote_entity(db, Starship, starship_id)
+    except SwapiError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return {
+        "message": f"Starship with name `{label}` voted successfully. Total votes: {vote_count}"
+    }
