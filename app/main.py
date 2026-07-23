@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import Character, Film, Starship
 from app.schemas import CharacterPage, FilmPage, StarshipPage
-from app.services.sync_services import sync_swapi_data, get_paginated, search_paginated, vote_entity
+from app.services.sync_services import sync_swapi_data, get_paginated, search_paginated, vote_entity, EntityNotFoundError
 from app.services.swapi_service import SwapiError
 
 app = FastAPI(title="Star Wars API")
@@ -60,7 +60,7 @@ def vote_character(
     ):
     try:
         voted_entity_count, voted_entity_name = vote_entity(db, Character, character_id)
-    except SwapiError as exc:
+    except EntityNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     return {
         "message": f"Character with name `{voted_entity_name}` voted successfully. Total votes: {voted_entity_count}"
@@ -102,7 +102,7 @@ def vote_film(
     ):
     try:
         voted_entity_count, voted_entity_name = vote_entity(db, Film, film_id)
-    except SwapiError as exc:
+    except EntityNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     return {
         "message": f"Film with title `{voted_entity_name}` voted successfully. Total votes: {voted_entity_count}"
@@ -144,7 +144,7 @@ def vote_starship(
     ):
     try:
         vote_count, label = vote_entity(db, Starship, starship_id)
-    except SwapiError as exc:
+    except EntityNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     return {
         "message": f"Starship with name `{label}` voted successfully. Total votes: {vote_count}"

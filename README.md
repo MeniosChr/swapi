@@ -49,6 +49,8 @@ uvicorn app.main:app --reload
 
 Server: [http://127.0.0.1:8000](http://127.0.0.1:8000)
 
+Once the server is running, open the interactive Swagger UI at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) to explore and try the endpoints in the browser.
+
 ## Sync data from SWAPI
 
 Fetch characters, films, and starships, store them locally, and build many-to-many relationships.

@@ -9,6 +9,10 @@ from app.db import SessionLocal
 from app.models import Starship, Character, Film
 from app.services.swapi_service import fetch_characters, fetch_films, fetch_starships, SwapiError, TIMEOUT
 
+class EntityNotFoundError(Exception):
+    """Raised when a local DB entity is missing (maps to HTTP 404)."""
+    pass
+
 def _get_swapi_id(url: str) -> int:
     return int(re.search(r"(\d+)/$", url).group(1))
 
@@ -127,7 +131,9 @@ def search_paginated(db: Session, model, column, term: str, page: int, page_size
 def vote_entity(db: Session, model, entity_id: int):
     entity = db.get(model, entity_id)
     if entity is None:
-        raise SwapiError(f"Entity on {model.__tablename__} with id {entity_id} not found")
+        raise EntityNotFoundError(
+            f"Entity on {model.__tablename__} with id {entity_id} not found"
+        )
 
     entity.vote_count += 1
     db.commit()
@@ -138,7 +144,3 @@ def vote_entity(db: Session, model, entity_id: int):
 
 if __name__ == "__main__":
     asyncio.run(sync_swapi_data())
-
-
-# Optional later: rename not-found away from SwapiError so 503 vs 404 stays crystal clear in an interview.
-# If a URL were malformed, re.search(...).group(1) would crash — OK for SWAPI data; optional hardening later

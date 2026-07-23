@@ -16,5 +16,4 @@ def test_vote_character_success(client, db):
 def test_vote_character_not_found(client):
     response = client.post("/characters/123/vote")
     assert response.status_code == 404
-    body = response.json()
     assert "Entity on character with id 123 not found"
